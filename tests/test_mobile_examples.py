@@ -227,6 +227,7 @@ class TestWebAPIIntegration:
             user = response.json()
             assert user["name"] == new_user["name"]
             assert user["email"] == new_user["email"]
+            print("check git ")
         
         # Could then verify in web UI
         # with allure.step("Verify user in Web UI"):
