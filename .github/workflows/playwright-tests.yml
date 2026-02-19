@@ -1,0 +1,115 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+        python-version: ['3.11']
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Install Playwright browsers
+      run: playwright install --with-deps ${{ matrix.browser }}
+    
+    - name: Run smoke tests
+      run: pytest -m smoke --browser=${{ matrix.browser }} --headed=false --tracing=retain-on-failure
+      continue-on-error: true
+    
+    - name: Run all tests
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: pytest --browser=${{ matrix.browser }} --headed=false
+    
+    - name: Upload Allure results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: allure-results-${{ matrix.browser }}
+        path: reports/allure-results
+        retention-days: 30
+    
+    - name: Upload screenshots
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: screenshots-${{ matrix.browser }}
+        path: reports/screenshots
+        retention-days: 30
+    
+    - name: Upload traces
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: traces-${{ matrix.browser }}
+        path: reports/traces
+        retention-days: 30
+    
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: logs-${{ matrix.browser }}
+        path: logs
+        retention-days: 30
+
+  report:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Get Allure history
+      uses: actions/checkout@v4
+      if: always()
+      continue-on-error: true
+      with:
+        ref: gh-pages
+        path: gh-pages
+    
+    - name: Allure Report
+      uses: simple-elf/allure-report-action@master
+      if: always()
+      with:
+        allure_results: allure-results-chromium,allure-results-firefox,allure-results-webkit
+        allure_history: allure-history
+        keep_reports: 20
+    
+    - name: Deploy report to GitHub Pages
+      if: always()
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_branch: gh-pages
+        publish_dir: allure-history

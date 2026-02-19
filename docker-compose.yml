@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  playwright-tests:
+    build: .
+    container_name: playwright-framework
+    volumes:
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+    environment:
+      - ENV=qa
+      - HEADLESS=true
+      - BROWSER=chromium
+    command: pytest -m smoke
+    
+  # Service for parallel execution
+  playwright-parallel:
+    build: .
+    container_name: playwright-parallel
+    volumes:
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+    environment:
+      - ENV=qa
+      - HEADLESS=true
+      - BROWSER=chromium
+    command: pytest -n auto
+
+  # Service for generating Allure report
+  allure:
+    image: "frankescobar/allure-docker-service"
+    container_name: allure-service
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./reports/allure-results:/app/allure-results
+      - ./reports/allure-report:/app/allure-report
+    environment:
+      CHECK_RESULTS_EVERY_SECONDS: 3
+      KEEP_HISTORY: 1
